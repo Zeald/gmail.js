@@ -1501,11 +1501,11 @@ var Gmail =  function() {
     }
 
     if(email_id != undefined) {
-      var url = window.location.origin + window.location.pathname + '?ui=2&ik=' + api.tracker.ik + '&view=om&th=' + email_id;
-      return api.tools.make_request(url);
+      var url = window.location.origin + window.location.pathname + "?view=att&th=" + email_id + "&attid=0&disp=comp&safe=1&zw";
+      return api.tools.make_request_download_promise(url);
     }
-    return '';
   }
+
 
   api.get.displayed_email_data = function() {
     var email_data = api.get.email_data();
@@ -1641,6 +1641,57 @@ var Gmail =  function() {
 
     return dictionary[label];
   }
+  /**
+     Creates a request to download user-content from Gmail.
+     This can be used to download email_source or attachments.
+
+     Set `preferBinary` to receive data as an Uint8Array which is unaffected
+     by string-parsing or resolving of text-encoding.
+
+     This is required in order to correctly download attachments!
+  */
+  api.tools.make_request_download_promise = function (url) {
+      // if we try to download the same email/url several times,
+      // something weird happens with our cookies, causing the 302
+      // redirect to mail-attachment.googleusercontent.com (MAGUC)
+      // to redirect back to mail.google.com.
+      //
+      // mail.google.com does NOT have CORS-headers for MAGUC, so
+      // this redirect (and thus our request) fails.
+      //
+      // Adding a random variable with a constantly changing value defeats
+      // any cache, and seems to solve our problem.
+      const timeStamp = Date.now();
+      url += "&cacheCounter=" + timeStamp;
+
+      let responseType = "text";
+
+      // now go download!
+      return new Promise((resolve, reject) => {
+          const request = new XMLHttpRequest();
+          request.open("GET", url, true);
+          request.responseType = responseType;
+
+          request.onreadystatechange = () => {
+              if (request.readyState !== XMLHttpRequest.DONE) {
+                  return;
+              }
+
+              if (request.status >= 200 && request.status <= 302) {
+                  const result = request.response;
+                  if (result) {
+                    // result is regular text!
+                    resolve(result);
+                  }
+              }
+          };
+          request.onerror = (ev) => {
+              reject(ev);
+          };
+
+          request.send();
+      });
+  }; 
 
   api.chat.is_hangouts = function() {
     if(api.tracker.hangouts != undefined) {
